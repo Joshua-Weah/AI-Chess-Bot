@@ -337,7 +337,7 @@
   </div>
 
   <script type="module">
-    import { parseFEN, getLegalMoves, applyMove, getGameStatus, PIECES, WHITE, BLACK, isWhite, STARTING_FEN } from './src/board.js';
+    import { parseFEN, toFEN, getLegalMoves, applyMove, getGameStatus, PIECES, WHITE, BLACK, isWhite, STARTING_FEN } from './src/board.js';
     import { getAIMove } from './src/ai.js';
     import { renderBoard, formatMove, appendMoveLog } from './src/ui.js';
 
@@ -496,6 +496,30 @@
     }
 
     // ── AI ────────────────────────────────────────────────────
+    let aiWorker = null;
+
+    function getWorker() {
+      if (!aiWorker) {
+        aiWorker = new Worker('./src/worker.js', { type: 'module' });
+        aiWorker.onmessage = (e) => {
+          const { type, move } = e.data;
+          if (type === 'move_result') {
+            if (move) {
+              const pieceAtFrom = currentState.board[move.fromRow][move.fromCol];
+              logPlayerMove(move, pieceAtFrom, currentState.fullMoves);
+              lastMove = move;
+              currentState = applyMove(currentState, move);
+              stateHistory.push(currentState);
+            }
+            aiThinking = false;
+            thinkingEl.textContent = '';
+            draw();
+          }
+        };
+      }
+      return aiWorker;
+    }
+       
     function scheduleAIMove() {
       const aiSide = getPlayerSide() === WHITE ? BLACK : WHITE;
       if (currentState.turn !== aiSide) return;
@@ -504,19 +528,13 @@
       thinkingEl.textContent = 'AI is thinking…';
       draw();
 
-      setTimeout(() => {
-        const move = getAIMove(currentState, getAIMode(), getDepth());
-        if (move) {
-          const pieceAtFrom = currentState.board[move.fromRow][move.fromCol];
-          logPlayerMove(move, pieceAtFrom, currentState.fullMoves);
-          lastMove = move;
-          currentState = applyMove(currentState, move);
-          stateHistory.push(currentState);
-        }
-        aiThinking = false;
-        thinkingEl.textContent = '';
-        draw();
-      }, 30); // small delay keeps UI responsive
+      const worker = getWorker();
+      worker.postMessage({
+        type: 'find_move',
+        fen: toFEN(currentState),
+        mode: getAIMode(),
+        depth: getDepth(),
+      });
     }
 
     // ── Controls ──────────────────────────────────────────────

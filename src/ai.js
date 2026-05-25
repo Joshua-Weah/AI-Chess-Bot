@@ -151,15 +151,42 @@ const CHECKMATE_SCORE = 100000;
  * @param {number} beta
  * @param {boolean} maximising - true = White's turn
  */
+function quiescence(state, alpha, beta, maximising) {
+  const stand_pat = evaluate(state);
+  if (maximising) {
+    if (stand_pat >= beta) return beta;
+    alpha = Math.max(alpha, stand_pat);
+  } else {
+    if (stand_pat <= alpha) return alpha;
+    beta = Math.min(beta, stand_pat);
+  }
+
+  // Only search captures
+  const moves = getLegalMoves(state).filter(m => state.board[m.toRow][m.toCol] !== PIECES.EMPTY);
+  for (const move of moves) {
+    const next = applyMove(state, move);
+    const score = quiescence(next, alpha, beta, !maximising);
+    if (maximising) {
+      alpha = Math.max(alpha, score);
+      if (alpha >= beta) break;
+    } else {
+      beta = Math.min(beta, score);
+      if (beta <= alpha) break;
+    }
+  }
+  return maximising ? alpha : beta;
+}
+
 function alphaBeta(state, depth, alpha, beta, maximising) {
   const status = getGameStatus(state);
   if (status === 'checkmate') return maximising ? -CHECKMATE_SCORE : CHECKMATE_SCORE;
   if (status === 'stalemate') return 0;
-  if (depth === 0) return evaluate(state);
+
+  // At depth 0, drop into quiescence instead of static eval
+  if (depth === 0) return quiescence(state, alpha, beta, maximising);
 
   const moves = getLegalMoves(state);
 
-  // Move ordering: captures first (improves alpha-beta efficiency)
   moves.sort((a, b) => {
     const capA = state.board[a.toRow][a.toCol] !== PIECES.EMPTY ? 1 : 0;
     const capB = state.board[b.toRow][b.toCol] !== PIECES.EMPTY ? 1 : 0;
@@ -173,7 +200,7 @@ function alphaBeta(state, depth, alpha, beta, maximising) {
       const score = alphaBeta(next, depth - 1, alpha, beta, false);
       best = Math.max(best, score);
       alpha = Math.max(alpha, best);
-      if (beta <= alpha) break; // β cut-off
+      if (beta <= alpha) break;
     }
     return best;
   } else {
@@ -183,17 +210,11 @@ function alphaBeta(state, depth, alpha, beta, maximising) {
       const score = alphaBeta(next, depth - 1, alpha, beta, true);
       best = Math.min(best, score);
       beta = Math.min(beta, best);
-      if (beta <= alpha) break; // α cut-off
+      if (beta <= alpha) break;
     }
     return best;
   }
 }
-
-/**
- * Find the best move using alpha-beta search at a given depth.
- * @param {GameState} state
- * @param {number} depth - search depth (3 = fast, 4–5 = stronger but slower)
- */
 export function bestMove(state, depth = 3) {
   const moves = getLegalMoves(state);
   if (moves.length === 0) return null;
