@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chess Bot</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0e0f13;
+      --surface:     #16181f;
+      --border:      #2a2d38;
+      --accent:      #c89b3c;
+      --accent-dim:  #8a6b2a;
+      --text:        #e8e0d0;
+      --text-dim:    #7a7a8a;
+      --light-sq:    #f0d9b5;
+      --dark-sq:     #b58863;
+      --sel-sq:      #7fc97f;
+      --last-sq:     rgba(255,215,0,0.35);
+      --dot:         rgba(0,0,0,0.25);
+      --ring:        rgba(0,0,0,0.30);
+      --white-piece: #fff8ee;
+      --black-piece: #1a1a1a;
+      --radius:      8px;
+      --shadow:      0 8px 32px rgba(0,0,0,0.6);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Georgia', serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 24px 16px 48px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+
+    .subtitle {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+      margin-bottom: 24px;
+    }
+
+    /* ── Layout ────────────────────────────────────────────── */
+    .layout {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    /* ── Board ─────────────────────────────────────────────── */
+    .board-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr);
+      width: min(480px, 90vw);
+      height: min(480px, 90vw);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      position: relative;
+    }
+
+    .square {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: filter 0.1s;
+    }
+    .square:hover { filter: brightness(1.12); }
+    .square.light { background: var(--light-sq); }
+    .square.dark  { background: var(--dark-sq); }
+    .square.selected { background: var(--sel-sq) !important; }
+    .square.last-move { background: var(--last-sq) !important; }
+
+    .piece {
+      font-size: clamp(1.6rem, 5vw, 2.6rem);
+      line-height: 1;
+      user-select: none;
+      position: relative;
+      z-index: 2;
+      transition: transform 0.12s;
+    }
+    .piece:hover { transform: scale(1.08); }
+    .white-piece { color: var(--white-piece); text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+    .black-piece { color: var(--black-piece); text-shadow: 0 1px 2px rgba(255,255,255,0.15); }
+
+    .move-dot {
+      width: 28%;
+      height: 28%;
+      background: var(--dot);
+      border-radius: 50%;
+      position: absolute;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    .capture-ring {
+      width: 88%;
+      height: 88%;
+      border: 4px solid var(--ring);
+      border-radius: 50%;
+      position: absolute;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    /* rank/file labels are appended to board but hidden for now */
+    .rank-label, .file-label { display: none; }
+
+    /* ── Side panel ───────────────────────────────────────── */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 220px;
+      flex-shrink: 0;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+
+    .card-title {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+    }
+
+    /* Status */
+    #status {
+      font-size: 1rem;
+      font-weight: bold;
+      color: var(--accent);
+      min-height: 1.4em;
+    }
+
+    #thinking {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      min-height: 1.2em;
+      margin-top: 4px;
+    }
+
+    /* Controls */
+    .controls { display: flex; flex-direction: column; gap: 8px; }
+
+    label {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    select, input[type=range] {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 4px 8px;
+      font-size: 0.8rem;
+      width: 100%;
+      cursor: pointer;
+    }
+
+    input[type=range] { padding: 0; height: 4px; accent-color: var(--accent); }
+
+    #depth-label { font-size: 0.75rem; color: var(--text-dim); }
+
+    .btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.8rem;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      text-align: center;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #000;
+      font-weight: bold;
+    }
+    .btn.primary:hover { background: var(--accent-dim); border-color: var(--accent-dim); }
+
+    /* Move log */
+    #log {
+      max-height: 220px;
+      overflow-y: auto;
+      font-size: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    #log::-webkit-scrollbar { width: 4px; }
+    #log::-webkit-scrollbar-track { background: transparent; }
+    #log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .log-row { display: grid; grid-template-columns: 24px 1fr 1fr; gap: 4px; padding: 2px 0; }
+    .move-num { color: var(--text-dim); }
+    .move-white, .move-black { color: var(--text); }
+
+    /* Promotion modal */
+    #promo-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #promo-modal.open { display: flex; }
+    .promo-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      display: flex;
+      gap: 12px;
+    }
+    .promo-btn {
+      font-size: 2.8rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      color: var(--text);
+      transition: border-color 0.1s;
+    }
+    .promo-btn:hover { border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <h1>Chess Bot</h1>
+  <p class="subtitle">Play against an AI — powered by alpha-beta minimax</p>
+
+  <div class="layout">
+    <!-- Board -->
+    <div class="board-wrap">
+      <div id="board"></div>
+    </div>
+
+    <!-- Panel -->
+    <div class="panel">
+      <div class="card">
+        <div class="card-title">Game</div>
+        <div id="status">White to move</div>
+        <div id="thinking"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Settings</div>
+        <div class="controls">
+          <label>
+            You play as
+            <select id="side-select">
+              <option value="white">White</option>
+              <option value="black">Black</option>
+            </select>
+          </label>
+
+          <label>
+            AI mode
+            <select id="ai-mode">
+              <option value="minimax">Minimax (alpha-beta)</option>
+              <option value="random">Random</option>
+            </select>
+          </label>
+
+          <label>
+            Search depth: <span id="depth-val">3</span>
+            <input type="range" id="depth-range" min="1" max="5" value="3" />
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Actions</div>
+        <div class="controls">
+          <button class="btn primary" id="new-game">New Game</button>
+          <button class="btn" id="flip-board">Flip Board</button>
+          <button class="btn" id="undo-btn">Undo Move</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Moves</div>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Promotion modal -->
+  <div id="promo-modal">
+    <div class="promo-box" id="promo-box"></div>
+  </div>
+
+  <script type="module">
+    import { parseFEN, getLegalMoves, applyMove, getGameStatus, PIECES, WHITE, BLACK, isWhite, STARTING_FEN } from './src/board.js';
+    import { getAIMove } from './src/ai.js';
+    import { renderBoard, formatMove, appendMoveLog } from './src/ui.js';
+
+    // ── Game state ────────────────────────────────────────────
+    let currentState = parseFEN(STARTING_FEN);
+    let stateHistory = [currentState];
+    let selected = null;
+    let legalMovesForSelected = [];
+    let lastMove = null;
+    let flipped = false;
+    let aiThinking = false;
+    let pendingPromoMove = null;
+
+    const boardEl    = document.getElementById('board');
+    const statusEl   = document.getElementById('status');
+    const thinkingEl = document.getElementById('thinking');
+    const logEl      = document.getElementById('log');
+    const promoModal = document.getElementById('promo-modal');
+    const promoBox   = document.getElementById('promo-box');
+    const depthRange = document.getElementById('depth-range');
+    const depthVal   = document.getElementById('depth-val');
+
+    // ── Helpers ───────────────────────────────────────────────
+    const getPlayerSide = () => document.getElementById('side-select').value;
+    const getAIMode     = () => document.getElementById('ai-mode').value;
+    const getDepth      = () => parseInt(depthRange.value);
+
+    function updateStatus() {
+      const status = getGameStatus(currentState);
+      if (status === 'checkmate') {
+        const winner = currentState.turn === WHITE ? 'Black' : 'White';
+        statusEl.textContent = `Checkmate — ${winner} wins!`;
+      } else if (status === 'stalemate') {
+        statusEl.textContent = 'Stalemate — draw!';
+      } else {
+        statusEl.textContent = (currentState.turn === WHITE ? 'White' : 'Black') + ' to move';
+      }
+    }
+
+    function draw() {
+      renderBoard(boardEl, currentState, {
+        legalMoves: legalMovesForSelected,
+        selected,
+        lastMove,
+        flipped,
+        onSquareClick: handleSquareClick,
+      });
+      updateStatus();
+    }
+
+    // ── Click handling ────────────────────────────────────────
+    function handleSquareClick(row, col) {
+      if (aiThinking) return;
+      if (getGameStatus(currentState) !== 'playing') return;
+      if (currentState.turn !== getPlayerSide()) return;
+
+      const piece = currentState.board[row][col];
+
+      // If a piece is already selected, try to move
+      if (selected) {
+        const move = legalMovesForSelected.find(m => m.toRow === row && m.toCol === col);
+
+        if (move) {
+          // Promotion?
+          const promos = legalMovesForSelected.filter(m => m.toRow === row && m.toCol === col && m.promotion);
+          if (promos.length > 0) {
+            showPromoModal(promos, row, col);
+            return;
+          }
+          executePlayerMove(move);
+          return;
+        }
+
+        // Clicked own piece — re-select
+        if (piece !== PIECES.EMPTY && isWhite(piece) === (getPlayerSide() === WHITE)) {
+          selectSquare(row, col);
+          return;
+        }
+
+        // Deselect
+        selected = null;
+        legalMovesForSelected = [];
+        draw();
+        return;
+      }
+
+      // Select a piece
+      if (piece !== PIECES.EMPTY && isWhite(piece) === (getPlayerSide() === WHITE)) {
+        selectSquare(row, col);
+      }
+    }
+
+    function selectSquare(row, col) {
+      selected = { row, col };
+      const allLegal = getLegalMoves(currentState);
+      legalMovesForSelected = allLegal.filter(m => m.fromRow === row && m.fromCol === col);
+      draw();
+    }
+
+    function executePlayerMove(move) {
+      const pieceAtFrom = currentState.board[move.fromRow][move.fromCol];
+      logPlayerMove(move, pieceAtFrom, currentState.fullMoves);
+
+      lastMove = move;
+      currentState = applyMove(currentState, move);
+      stateHistory.push(currentState);
+      selected = null;
+      legalMovesForSelected = [];
+      draw();
+
+      if (getGameStatus(currentState) === 'playing') {
+        scheduleAIMove();
+      }
+    }
+
+    // ── Promotion ─────────────────────────────────────────────
+    function showPromoModal(promos, toRow, toCol) {
+      const glyphs = { q: '♕', r: '♖', b: '♗', n: '♘', Q: '♛', R: '♜', B: '♝', N: '♞' };
+      const isWh = getPlayerSide() === WHITE;
+      promoBox.innerHTML = '';
+      for (const promo of promos) {
+        const btn = document.createElement('button');
+        btn.className = 'promo-btn';
+        btn.textContent = isWh ? glyphs[promo.promotion.toUpperCase()] : glyphs[promo.promotion];
+        btn.addEventListener('click', () => {
+          promoModal.classList.remove('open');
+          executePlayerMove(promo);
+        });
+        promoBox.appendChild(btn);
+      }
+      promoModal.classList.add('open');
+    }
+
+    promoModal.addEventListener('click', e => {
+      if (e.target === promoModal) promoModal.classList.remove('open');
+    });
+
+    // ── Move log ──────────────────────────────────────────────
+    let logMoveNum = 1;
+    let pendingWhite = null;
+
+    function logPlayerMove(move, pieceAtFrom, fullMoves) {
+      const entry = formatMove(move, pieceAtFrom);
+      if (currentState.turn === WHITE) {
+        // White just moved
+        pendingWhite = { num: fullMoves, entry };
+      } else {
+        // Black just moved
+        if (pendingWhite) {
+          appendMoveLog(logEl, pendingWhite.num, pendingWhite.entry, entry);
+          pendingWhite = null;
+        } else {
+          appendMoveLog(logEl, fullMoves, '—', entry);
+        }
+      }
+    }
+
+    // ── AI ────────────────────────────────────────────────────
+    function scheduleAIMove() {
+      const aiSide = getPlayerSide() === WHITE ? BLACK : WHITE;
+      if (currentState.turn !== aiSide) return;
+
+      aiThinking = true;
+      thinkingEl.textContent = 'AI is thinking…';
+      draw();
+
+      setTimeout(() => {
+        const move = getAIMove(currentState, getAIMode(), getDepth());
+        if (move) {
+          const pieceAtFrom = currentState.board[move.fromRow][move.fromCol];
+          logPlayerMove(move, pieceAtFrom, currentState.fullMoves);
+          lastMove = move;
+          currentState = applyMove(currentState, move);
+          stateHistory.push(currentState);
+        }
+        aiThinking = false;
+        thinkingEl.textContent = '';
+        draw();
+      }, 30); // small delay keeps UI responsive
+    }
+
+    // ── Controls ──────────────────────────────────────────────
+    document.getElementById('new-game').addEventListener('click', () => {
+      currentState = parseFEN(STARTING_FEN);
+      stateHistory = [currentState];
+      selected = null;
+      legalMovesForSelected = [];
+      lastMove = null;
+      pendingWhite = null;
+      logEl.innerHTML = '';
+      thinkingEl.textContent = '';
+      draw();
+
+      // If player chose Black, AI goes first
+      if (getPlayerSide() === BLACK) scheduleAIMove();
+    });
+
+    document.getElementById('flip-board').addEventListener('click', () => {
+      flipped = !flipped;
+      draw();
+    });
+
+    document.getElementById('undo-btn').addEventListener('click', () => {
+      if (aiThinking) return;
+      // Undo two half-moves (player + AI) so it's the player's turn again
+      const steps = stateHistory.length > 2 ? 2 : stateHistory.length > 1 ? 1 : 0;
+      if (steps === 0) return;
+      stateHistory = stateHistory.slice(0, stateHistory.length - steps);
+      currentState = stateHistory[stateHistory.length - 1];
+      selected = null;
+      legalMovesForSelected = [];
+      lastMove = currentState.moveHistory[currentState.moveHistory.length - 1] ?? null;
+      draw();
+    });
+
+    depthRange.addEventListener('input', () => {
+      depthVal.textContent = depthRange.value;
+    });
+
+    document.getElementById('side-select').addEventListener('change', () => {
+      document.getElementById('new-game').click();
+    });
+
+    // ── Init ─────────────────────────────────────────────────
+    draw();
+  </script>
+</body>
+</html>

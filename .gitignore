@@ -1,0 +1,15 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Dependencies (if you add any later)
+node_modules/
+
+# Build output (if you add a bundler later)
+dist/
+build/
