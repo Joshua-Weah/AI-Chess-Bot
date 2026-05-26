@@ -273,16 +273,28 @@ export function bestMove(state, depth = 3) {
   if (moves.length === 0) return null;
 
   const maximising = state.turn === WHITE;
-  let bestScore = maximising ? -Infinity : Infinity;
+  const TIME_LIMIT = 1500; // ms
+  const start = Date.now();
   let best = moves[0];
 
-  for (const move of moves) {
-    const next = applyMove(state, move);
-    const score = alphaBeta(next, depth - 1, -Infinity, Infinity, !maximising);
-    if (maximising ? score > bestScore : score < bestScore) {
-      bestScore = score;
-      best = move;
+  // Iterative deepening — search deeper until time runs out
+  for (let d = 1; d <= depth; d++) {
+    if (Date.now() - start > TIME_LIMIT) break;
+
+    let bestScore = maximising ? -Infinity : Infinity;
+    let bestAtDepth = moves[0];
+
+    for (const move of moves) {
+      if (Date.now() - start > TIME_LIMIT) break;
+      const next = applyMove(state, move);
+      const score = alphaBeta(next, d - 1, -Infinity, Infinity, !maximising);
+      if (maximising ? score > bestScore : score < bestScore) {
+        bestScore = score;
+        bestAtDepth = move;
+      }
     }
+
+    best = bestAtDepth;
   }
 
   return best;
