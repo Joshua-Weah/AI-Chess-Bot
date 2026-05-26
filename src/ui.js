@@ -35,7 +35,7 @@ export function renderBoard(container, state, opts = {}) {
   container.innerHTML = '';
   container.className = 'board';
 
-  const rows = flipped ? [0,1,2,3,4,5,6,7] : [7,6,5,4,3,2,1,0];
+  const rows = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
   const cols = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
 
   for (const r of rows) {
