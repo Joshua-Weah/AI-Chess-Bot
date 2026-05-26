@@ -11,7 +11,7 @@
 
 import { getLegalMoves, applyMove, getGameStatus, isWhite, isBlack, PIECES, WHITE, BLACK } from './board.js';
 
-// ─── Stage 1: Random AI ───────────────────────────────────────────────────────
+// ─── Random AI ───────────────────────────────────────────────────────
 
 /** Pick a uniformly random legal move */
 export function randomMove(state) {
@@ -20,7 +20,7 @@ export function randomMove(state) {
   return moves[Math.floor(Math.random() * moves.length)];
 }
 
-// ─── Stage 2: Material evaluation ────────────────────────────────────────────
+// ─── Material evaluation ────────────────────────────────────────────
 
 /**
  * Piece values in centipawns.
@@ -113,6 +113,55 @@ const PST_MAP = {
   [PIECES.W_QUEEN]: PST_QUEEN, [PIECES.W_KING]: PST_KING,
 };
 
+
+/**
+ * King safety evaluation.
+ * Checks pawn shield, open files near the king, and centre exposure.
+ * Returns a bonus for safe kings, penalty for exposed kings.
+ */
+function kingSafety(state, side) {
+  const kingPiece = side === WHITE ? PIECES.W_KING : PIECES.B_KING;
+  const pawnPiece = side === WHITE ? PIECES.W_PAWN : PIECES.B_PAWN;
+  let score = 0;
+  let kingRow = -1, kingCol = -1;
+
+  // Find the king
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (state.board[r][c] === kingPiece) {
+        kingRow = r; kingCol = c;
+      }
+    }
+  }
+  if (kingRow === -1) return 0;
+
+  // Pawn shield — reward pawns in front of the king
+  const shieldRow = side === WHITE ? kingRow - 1 : kingRow + 1;
+  if (shieldRow >= 0 && shieldRow < 8) {
+    for (let c = kingCol - 1; c <= kingCol + 1; c++) {
+      if (c >= 0 && c < 8 && state.board[shieldRow][c] === pawnPiece) {
+        score += 10; // Bonus for each shield pawn
+      }
+    }
+  }
+
+  // Open file penalty — penalise if no friendly pawn on king's file
+  let pawnOnFile = false;
+  for (let r = 0; r < 8; r++) {
+    if (state.board[r][kingCol] === pawnPiece) { pawnOnFile = true; break; }
+  }
+  if (!pawnOnFile) score -= 20;
+
+  // Centre penalty — penalise king in the centre columns during play
+  const pieceCount = state.board.flat().filter(p => p !== PIECES.EMPTY).length;
+  const isEndgame = pieceCount < 14;
+  if (!isEndgame && kingCol >= 2 && kingCol <= 5) {
+    score -= 30;
+  }
+
+  return score;
+}
+
 /** Static evaluation function — positive favours White, negative favours Black */
 export function evaluate(state) {
   let score = 0;
@@ -136,10 +185,14 @@ export function evaluate(state) {
       }
     }
   }
+  // Add king safety for both sides
+  score += kingSafety(state, WHITE);
+  score -= kingSafety(state, BLACK);
+
   return score;
 }
 
-// ─── Stage 3 & 4: Minimax with Alpha-Beta pruning ─────────────────────────────
+// ─── Minimax with Alpha-Beta pruning ─────────────────────────────
 
 const CHECKMATE_SCORE = 100000;
 
