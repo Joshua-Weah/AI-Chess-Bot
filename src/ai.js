@@ -162,6 +162,53 @@ function kingSafety(state, side) {
   return score;
 }
 
+/**
+ * Pawn structure evaluation.
+ * Penalises doubled and isolated pawns, rewards passed pawns.
+ * Returns a score from White's perspective.
+ */
+function pawnStructure(state, side) {
+  const pawnPiece = side === WHITE ? PIECES.W_PAWN : PIECES.B_PAWN;
+  const enemyPawn = side === WHITE ? PIECES.B_PAWN : PIECES.W_PAWN;
+  let score = 0;
+
+  // Build a list of files that have friendly pawns
+  const pawnFiles = [];
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (state.board[r][c] === pawnPiece) pawnFiles.push({ r, c });
+    }
+  }
+
+  for (const { r, c } of pawnFiles) {
+
+    // Doubled pawn penalty — another friendly pawn on the same file
+    const doubled = pawnFiles.filter(p => p.c === c).length > 1;
+    if (doubled) score -= 20;
+
+    // Isolated pawn penalty — no friendly pawns on adjacent files
+    const hasNeighbour = pawnFiles.some(p => p.c === c - 1 || p.c === c + 1);
+    if (!hasNeighbour) score -= 15;
+
+    // Passed pawn bonus — no enemy pawns blocking on same or adjacent files
+    let passed = true;
+    const forwardRows = side === WHITE
+      ? Array.from({ length: r }, (_, i) => i)       // rows 0..r-1
+      : Array.from({ length: 7 - r }, (_, i) => r + 1 + i); // rows r+1..7
+
+    for (const fr of forwardRows) {
+      for (const fc of [c - 1, c, c + 1]) {
+        if (fc < 0 || fc > 7) continue;
+        if (state.board[fr][fc] === enemyPawn) { passed = false; break; }
+      }
+      if (!passed) break;
+    }
+    if (passed) score += 30;
+  }
+
+  return score;
+}
+
 /** Static evaluation function — positive favours White, negative favours Black */
 export function evaluate(state) {
   let score = 0;
@@ -188,6 +235,10 @@ export function evaluate(state) {
   // Add king safety for both sides
   score += kingSafety(state, WHITE);
   score -= kingSafety(state, BLACK);
+
+  // Add pawn structure for both sides
+  score += pawnStructure(state, WHITE);
+  score -= pawnStructure(state, BLACK);
 
   return score;
 }
