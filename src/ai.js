@@ -340,7 +340,6 @@ export function getAIMove(state, mode = 'minimax', depth = 3) {
       m.toRow === bookMove.toRow && m.toCol === bookMove.toCol
     );
     if (found) {
-      console.log('Book move played!');
       return found;
     }
   }
