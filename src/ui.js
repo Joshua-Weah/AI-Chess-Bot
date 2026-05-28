@@ -13,17 +13,6 @@ const PIECE_GLYPHS = {
   [PIECES.EMPTY]: '',
 };
 
-/**
- * Render the board into a container element.
- * @param {HTMLElement} container
- * @param {GameState} state
- * @param {Object} opts
- * @param {Array|null} opts.legalMoves   - legal moves for currently selected piece
- * @param {Object|null} opts.selected    - { row, col } of selected square
- * @param {Object|null} opts.lastMove    - { fromRow, fromCol, toRow, toCol }
- * @param {Function} opts.onSquareClick  - callback(row, col)
- * @param {boolean} opts.flipped         - render from Black's side
- */
 export function renderBoard(container, state, opts = {}) {
   const { legalMoves = [], selected = null, lastMove = null, onSquareClick, flipped = false } = opts;
 
@@ -49,6 +38,13 @@ export function renderBoard(container, state, opts = {}) {
       if (lastMoveSet.has(key)) sq.classList.add('last-move');
 
       const piece = state.board[r][c];
+
+      // Highlight king in check
+      if (opts.inCheck) {
+        const kingPiece = opts.inCheck === 'white' ? PIECES.W_KING : PIECES.B_KING;
+        if (piece === kingPiece) sq.classList.add('in-check');
+      }
+
       if (piece !== PIECES.EMPTY) {
         const span = document.createElement('span');
         span.className = 'piece ' + (isWhite(piece) ? 'white-piece' : 'black-piece');

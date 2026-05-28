@@ -58,6 +58,7 @@
     .square.dark  { background: var(--dark-sq); }
     .square.selected { background: var(--sel-sq) !important; }
     .square.last-move { background: var(--last-sq) !important; }
+    .square.in-check { background: rgba(255, 0, 0, 0.6) !important; }
     .piece { font-size: clamp(1.6rem, 5vw, 2.6rem); line-height: 1; user-select: none; position: relative; z-index: 2; transition: transform 0.12s; }
     .piece:hover { transform: scale(1.08); }
     .white-piece { color: #ffffff; text-shadow: 0 0 0 #ffffff, 1px 1px 2px rgba(0,0,0,0.5); filter: drop-shadow(0 0 1px rgba(0,0,0,0.8)); }
@@ -150,9 +151,9 @@
   </div>
 
   <script type="module">
-    import { parseFEN, toFEN, getLegalMoves, applyMove, getGameStatus, PIECES, WHITE, BLACK, isWhite, STARTING_FEN } from './src/board.js';
     import { getAIMove } from './src/ai.js';
     import { renderBoard, formatMove, appendMoveLog } from './src/ui.js';
+    import { parseFEN, toFEN, getLegalMoves, applyMove, getGameStatus, isInCheck, PIECES, WHITE, BLACK, isWhite, STARTING_FEN } from './src/board.js';
 
     let currentState = parseFEN(STARTING_FEN);
     let stateHistory = [currentState];
@@ -189,15 +190,21 @@
     }
 
     function draw() {
+      const status = getGameStatus(currentState);
+      const inCheck = isInCheck(currentState)
+        ? (currentState.turn === WHITE ? 'white' : 'black')
+        : null;
+
       renderBoard(boardEl, currentState, {
         legalMoves: legalMovesForSelected,
         selected,
         lastMove,
         flipped,
+        inCheck,
         onSquareClick: handleSquareClick,
       });
       updateStatus();
-    }
+}
 
     function handleSquareClick(row, col) {
       if (aiThinking) return;
