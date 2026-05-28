@@ -9,13 +9,14 @@ Open `index.html` in a browser and play immediately.
 ## Features
 
 - Full legal move generation (including en passant, castling, promotion)
-- Check / checkmate / stalemate detection
-- AI powered by **alpha-beta minimax** with piece-square tables
+- Check / checkmate / stalemate detection with king highlight
+- AI powered by **alpha-beta minimax** with quiescence search and iterative deepening
+- King safety and pawn structure evaluation
+- Opening book covering e4 and d4 lines
 - Adjustable search depth (1–5)
-- Switchable random-move mode for testing
-- Move history log
-- Undo last move pair
-- Flip board view
+- Auto board flip based on which side you play
+- Move history log and undo
+- Web Worker for non-blocking AI search
 
 ---
 
@@ -23,11 +24,13 @@ Open `index.html` in a browser and play immediately.
 
 ```
 chess-bot/
-├── index.html          ← UI entry point (game controller + styles)
+├── index.html              ← UI entry point (game controller + styles)
 ├── src/
-│   ├── board.js        ← Board state, FEN parser, move generation, game rules
-│   ├── ai.js           ← AI engine (random / minimax / alpha-beta)
-│   └── ui.js           ← Board rendering, move formatting
+│   ├── board.js            ← Board state, FEN parser, move generation, game rules
+│   ├── ai.js               ← AI engine (minimax, alpha-beta, evaluation)
+│   ├── openings.js         ← Opening book (e4/d4 lines)
+│   ├── worker.js           ← Web Worker wrapper for AI search
+│   └── ui.js               ← Board rendering, move formatting
 └── README.md
 ```
 
@@ -38,9 +41,6 @@ chess-bot/
 Because the project uses ES modules, you need a local HTTP server (not `file://`):
 
 ```bash
-# Python (built-in)
-python3 -m http.server 8080
-
 # Node / npx
 npx serve .
 
@@ -48,13 +48,23 @@ npx serve .
 # Install "Live Server" extension → right-click index.html → Open with Live Server
 ```
 
-Then open [http://localhost:8080](http://localhost:8080).
+Then open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## Incremental Roadmap
+## How the AI Works
 
-The code is structured so you can improve it stage by stage, committing after each:
+1. **Opening book** — for the first few moves, `openings.js` returns a pre-set response instantly with no search required.
+2. **Move generation** — `generateMoves()` creates all pseudo-legal moves; `getLegalMoves()` filters out moves that leave the king in check.
+3. **Evaluation** — `evaluate()` scores the position using material values, piece-square tables, king safety, and pawn structure.
+4. **Alpha-beta search** — `alphaBeta()` is a minimax search that prunes branches where the score can never improve on already-found lines.
+5. **Quiescence search** — at depth 0, instead of evaluating statically, the engine keeps searching captures until the position is "quiet" to avoid horizon-effect blunders.
+6. **Iterative deepening** — the engine searches from depth 1 upward within a 1.5 second time limit, so it always responds quickly regardless of position complexity.
+7. **Web Worker** — the entire search runs on a background thread so the UI never freezes.
+
+---
+
+## What was built
 
 ### Stage 1 — Playable baseline ✅
 - [x] Board representation (8×8 array, FEN parsing)
@@ -83,17 +93,11 @@ The code is structured so you can improve it stage by stage, committing after ea
 - [x] Auto board flip based on player side
 - [x] King highlighted in red when in check
 - [x] Improved piece visibility
----
-
-## How the AI Works
-
-1. **Move generation** — `generateMoves()` creates all pseudo-legal moves; `getLegalMoves()` filters out moves that leave the king in check.
-2. **Evaluation** — `evaluate()` sums material values and piece-square table bonuses. Positive = White advantage.
-3. **Alpha-beta search** — `alphaBeta()` is a standard negamax-style minimax that prunes branches where the score can never improve on already-found lines.
-4. **Move ordering** — captures are tried first, which dramatically improves pruning efficiency.
 
 ---
 
-## License
+## Built with
 
-MIT
+- Vanilla JavaScript (ES Modules)
+- HTML / CSS
+- Web Workers API
