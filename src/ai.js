@@ -1,20 +1,29 @@
 /**
  * ai.js — Chess AI engine
  *
- * Incremental improvement stages:
- *   Stage 1: Random move selection
- *   Stage 2: Basic material evaluation
- *   Stage 3: Minimax search (uncomment minimaxSearch)
- *   Stage 4: Alpha-beta pruning (uncomment alphaBeta)
- *   Stage 5: Move ordering, quiescence search, opening book
+ * Stages implemented:
+ *   - Random move selection
+ *   - Material evaluation with piece-square tables
+ *   - Alpha-beta minimax with quiescence search
+ *   - King safety and pawn structure evaluation
+ *   - Iterative deepening with time limit
+ *   - Transposition table for position caching
+ *   - Opening book
  */
 
 import { getLegalMoves, applyMove, getGameStatus, isWhite, isBlack, PIECES, WHITE, BLACK } from './board.js';
 import { getBookMove } from './openings.js';
 
-// ─── Random AI ────
+// ─── Transposition table ───
 
-/** Pick a uniformly random legal move */
+const transpositionTable = new Map();
+
+function getPositionKey(state) {
+  return state.board.map(row => row.join(',')).join('|') + '|' + state.turn;
+}
+
+// ─── Random AI ───
+
 export function randomMove(state) {
   const moves = getLegalMoves(state);
   if (moves.length === 0) return null;
@@ -23,10 +32,6 @@ export function randomMove(state) {
 
 // ─── Material evaluation ───
 
-/**
- * Piece values in centipawns.
- * Positive = good for White, negative = good for Black.
- */
 const PIECE_VALUES = {
   [PIECES.W_PAWN]:   100,  [PIECES.B_PAWN]:   -100,
   [PIECES.W_KNIGHT]: 320,  [PIECES.B_KNIGHT]: -320,
@@ -37,11 +42,6 @@ const PIECE_VALUES = {
   [PIECES.EMPTY]:    0,
 };
 
-/**
- * Piece-square tables (White's perspective; negate for Black).
- * Indexed [row][col], row 0 = rank 8.
- * Encourages pawns to advance, knights to centralise, etc.
- */
 const PST_PAWN = [
   [ 0,  0,  0,  0,  0,  0,  0,  0],
   [50, 50, 50, 50, 50, 50, 50, 50],
@@ -114,66 +114,48 @@ const PST_MAP = {
   [PIECES.W_QUEEN]: PST_QUEEN, [PIECES.W_KING]: PST_KING,
 };
 
+// ─── King safety ───
 
-/**
- * King safety evaluation.
- * Checks pawn shield, open files near the king, and centre exposure.
- * Returns a bonus for safe kings, penalty for exposed kings.
- */
 function kingSafety(state, side) {
   const kingPiece = side === WHITE ? PIECES.W_KING : PIECES.B_KING;
   const pawnPiece = side === WHITE ? PIECES.W_PAWN : PIECES.B_PAWN;
   let score = 0;
   let kingRow = -1, kingCol = -1;
 
-  // Find the king
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
-      if (state.board[r][c] === kingPiece) {
-        kingRow = r; kingCol = c;
-      }
+      if (state.board[r][c] === kingPiece) { kingRow = r; kingCol = c; }
     }
   }
   if (kingRow === -1) return 0;
 
-  // Pawn shield — reward pawns in front of the king
   const shieldRow = side === WHITE ? kingRow - 1 : kingRow + 1;
   if (shieldRow >= 0 && shieldRow < 8) {
     for (let c = kingCol - 1; c <= kingCol + 1; c++) {
-      if (c >= 0 && c < 8 && state.board[shieldRow][c] === pawnPiece) {
-        score += 10; // Bonus for each shield pawn
-      }
+      if (c >= 0 && c < 8 && state.board[shieldRow][c] === pawnPiece) score += 10;
     }
   }
 
-  // Open file penalty — penalise if no friendly pawn on king's file
   let pawnOnFile = false;
   for (let r = 0; r < 8; r++) {
     if (state.board[r][kingCol] === pawnPiece) { pawnOnFile = true; break; }
   }
   if (!pawnOnFile) score -= 20;
 
-  // Centre penalty — penalise king in the centre columns during play
   const pieceCount = state.board.flat().filter(p => p !== PIECES.EMPTY).length;
   const isEndgame = pieceCount < 14;
-  if (!isEndgame && kingCol >= 2 && kingCol <= 5) {
-    score -= 30;
-  }
+  if (!isEndgame && kingCol >= 2 && kingCol <= 5) score -= 30;
 
   return score;
 }
 
-/**
- * Pawn structure evaluation.
- * Penalises doubled and isolated pawns, rewards passed pawns.
- * Returns a score from White's perspective.
- */
+// ─── Pawn structure ───
+
 function pawnStructure(state, side) {
   const pawnPiece = side === WHITE ? PIECES.W_PAWN : PIECES.B_PAWN;
   const enemyPawn = side === WHITE ? PIECES.B_PAWN : PIECES.W_PAWN;
   let score = 0;
 
-  // Build a list of files that have friendly pawns
   const pawnFiles = [];
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
@@ -182,20 +164,16 @@ function pawnStructure(state, side) {
   }
 
   for (const { r, c } of pawnFiles) {
-
-    // Doubled pawn penalty — another friendly pawn on the same file
     const doubled = pawnFiles.filter(p => p.c === c).length > 1;
     if (doubled) score -= 20;
 
-    // Isolated pawn penalty — no friendly pawns on adjacent files
     const hasNeighbour = pawnFiles.some(p => p.c === c - 1 || p.c === c + 1);
     if (!hasNeighbour) score -= 15;
 
-    // Passed pawn bonus — no enemy pawns blocking on same or adjacent files
     let passed = true;
     const forwardRows = side === WHITE
-      ? Array.from({ length: r }, (_, i) => i)       // rows 0..r-1
-      : Array.from({ length: 7 - r }, (_, i) => r + 1 + i); // rows r+1..7
+      ? Array.from({ length: r }, (_, i) => i)
+      : Array.from({ length: 7 - r }, (_, i) => r + 1 + i);
 
     for (const fr of forwardRows) {
       for (const fc of [c - 1, c, c + 1]) {
@@ -210,52 +188,36 @@ function pawnStructure(state, side) {
   return score;
 }
 
-/** Static evaluation function — positive favours White, negative favours Black */
+// ─── Static evaluation ───
+
 export function evaluate(state) {
   let score = 0;
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const piece = state.board[r][c];
       if (piece === PIECES.EMPTY) continue;
-
-      const value = PIECE_VALUES[piece];
-      score += value;
-
-      // Piece-square bonus
+      score += PIECE_VALUES[piece];
       if (isWhite(piece)) {
         const pst = PST_MAP[piece];
         if (pst) score += pst[r][c];
       } else {
-        // Black: mirror row and negate
         const wPiece = piece - 6;
         const pst = PST_MAP[wPiece];
         if (pst) score -= pst[7 - r][c];
       }
     }
   }
-  // Add king safety for both sides
   score += kingSafety(state, WHITE);
   score -= kingSafety(state, BLACK);
-
-  // Add pawn structure for both sides
   score += pawnStructure(state, WHITE);
   score -= pawnStructure(state, BLACK);
-
   return score;
 }
 
-// ─── Minimax with Alpha-Beta pruning ───
+// ─── Search ───
 
 const CHECKMATE_SCORE = 100000;
 
-/**
- * Alpha-beta minimax search.
- * @param {GameState} state
- * @param {number} depth - remaining depth
- * @param {number} alpha
- * @param {number} beta
- * @param {boolean} maximising - true = White's turn
- */
 function quiescence(state, alpha, beta, maximising) {
   const stand_pat = evaluate(state);
   if (maximising) {
@@ -266,7 +228,6 @@ function quiescence(state, alpha, beta, maximising) {
     beta = Math.min(beta, stand_pat);
   }
 
-  // Only search captures
   const moves = getLegalMoves(state).filter(m => state.board[m.toRow][m.toCol] !== PIECES.EMPTY);
   for (const move of moves) {
     const next = applyMove(state, move);
@@ -283,23 +244,32 @@ function quiescence(state, alpha, beta, maximising) {
 }
 
 function alphaBeta(state, depth, alpha, beta, maximising) {
+  // Check transposition table
+  const key = getPositionKey(state);
+  const cached = transpositionTable.get(key);
+  if (cached && cached.depth >= depth) {
+    if (cached.flag === 'exact') return cached.score;
+    if (cached.flag === 'lower') alpha = Math.max(alpha, cached.score);
+    if (cached.flag === 'upper') beta = Math.min(beta, cached.score);
+    if (alpha >= beta) return cached.score;
+  }
+
   const status = getGameStatus(state);
   if (status === 'checkmate') return maximising ? -CHECKMATE_SCORE : CHECKMATE_SCORE;
   if (status === 'stalemate') return 0;
-
-  // At depth 0, drop into quiescence instead of static eval
   if (depth === 0) return quiescence(state, alpha, beta, maximising);
 
   const moves = getLegalMoves(state);
-
   moves.sort((a, b) => {
     const capA = state.board[a.toRow][a.toCol] !== PIECES.EMPTY ? 1 : 0;
     const capB = state.board[b.toRow][b.toCol] !== PIECES.EMPTY ? 1 : 0;
     return capB - capA;
   });
 
+  const originalAlpha = alpha;
+  let best = maximising ? -Infinity : Infinity;
+
   if (maximising) {
-    let best = -Infinity;
     for (const move of moves) {
       const next = applyMove(state, move);
       const score = alphaBeta(next, depth - 1, alpha, beta, false);
@@ -307,9 +277,7 @@ function alphaBeta(state, depth, alpha, beta, maximising) {
       alpha = Math.max(alpha, best);
       if (beta <= alpha) break;
     }
-    return best;
   } else {
-    let best = Infinity;
     for (const move of moves) {
       const next = applyMove(state, move);
       const score = alphaBeta(next, depth - 1, alpha, beta, true);
@@ -317,19 +285,26 @@ function alphaBeta(state, depth, alpha, beta, maximising) {
       beta = Math.min(beta, best);
       if (beta <= alpha) break;
     }
-    return best;
   }
+
+  // Store in transposition table
+  const flag = best <= originalAlpha ? 'upper' : best >= beta ? 'lower' : 'exact';
+  transpositionTable.set(key, { score: best, depth, flag });
+  if (transpositionTable.size > 100000) transpositionTable.clear();
+
+  return best;
 }
+
 export function bestMove(state, depth = 3) {
+  transpositionTable.clear();
   const moves = getLegalMoves(state);
   if (moves.length === 0) return null;
 
   const maximising = state.turn === WHITE;
-  const TIME_LIMIT = 1500; // ms
+  const TIME_LIMIT = 1500;
   const start = Date.now();
   let best = moves[0];
 
-  // Iterative deepening — search deeper until time runs out
   for (let d = 1; d <= depth; d++) {
     if (Date.now() - start > TIME_LIMIT) break;
 
@@ -354,19 +329,11 @@ export function bestMove(state, depth = 3) {
 
 // ─── AI selector ───
 
-/**
- * Main AI entry point.
- * @param {GameState} state
- * @param {'random'|'minimax'} mode
- * @param {number} depth
- */
 export function getAIMove(state, mode = 'minimax', depth = 3) {
   if (mode === 'random') return randomMove(state);
 
-  // Check opening book first
   const bookMove = getBookMove(state.moveHistory);
   if (bookMove) {
-    // Verify the book move is legal before playing it
     const legal = getLegalMoves(state);
     const found = legal.find(m =>
       m.fromRow === bookMove.fromRow && m.fromCol === bookMove.fromCol &&
