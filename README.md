@@ -85,24 +85,6 @@ The code is structured so you can improve it stage by stage, committing after ea
 - [x] Improved piece visibility
 ---
 
-## Suggested Git Workflow
-
-Commit after each meaningful change so your history tells a story:
-
-```bash
-git init
-git add .
-git commit -m "Stage 1: board representation and random AI"
-
-# ... improve ai.js with minimax ...
-git commit -m "Stage 2: alpha-beta minimax with piece-square tables"
-
-# ... add transposition table ...
-git commit -m "Stage 3a: transposition table with Zobrist hashing"
-```
-
----
-
 ## How the AI Works
 
 1. **Move generation** — `generateMoves()` creates all pseudo-legal moves; `getLegalMoves()` filters out moves that leave the king in check.
