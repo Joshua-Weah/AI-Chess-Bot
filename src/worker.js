@@ -13,11 +13,12 @@ import { parseFEN } from './board.js';
 import { getAIMove } from './ai.js';
 
 self.onmessage = function (e) {
-  const { type, fen, mode, depth } = e.data;
+  const { type, fen, history, mode, depth } = e.data;
 
   if (type === 'find_move') {
     try {
       const state = parseFEN(fen);
+      state.moveHistory = history || [];
       const move = getAIMove(state, mode, depth);
       self.postMessage({ type: 'move_result', move });
     } catch (err) {

@@ -10,8 +10,9 @@
  */
 
 import { getLegalMoves, applyMove, getGameStatus, isWhite, isBlack, PIECES, WHITE, BLACK } from './board.js';
+import { getBookMove } from './openings.js';
 
-// ─── Random AI ───────────────────────────────────────────────────────
+// ─── Random AI ────
 
 /** Pick a uniformly random legal move */
 export function randomMove(state) {
@@ -20,7 +21,7 @@ export function randomMove(state) {
   return moves[Math.floor(Math.random() * moves.length)];
 }
 
-// ─── Material evaluation ────────────────────────────────────────────
+// ─── Material evaluation ───
 
 /**
  * Piece values in centipawns.
@@ -243,7 +244,7 @@ export function evaluate(state) {
   return score;
 }
 
-// ─── Minimax with Alpha-Beta pruning ─────────────────────────────
+// ─── Minimax with Alpha-Beta pruning ───
 
 const CHECKMATE_SCORE = 100000;
 
@@ -351,7 +352,7 @@ export function bestMove(state, depth = 3) {
   return best;
 }
 
-// ─── AI selector ─────────────────────────────────────────────────────────────
+// ─── AI selector ───
 
 /**
  * Main AI entry point.
@@ -361,5 +362,21 @@ export function bestMove(state, depth = 3) {
  */
 export function getAIMove(state, mode = 'minimax', depth = 3) {
   if (mode === 'random') return randomMove(state);
+
+  // Check opening book first
+  const bookMove = getBookMove(state.moveHistory);
+  if (bookMove) {
+    // Verify the book move is legal before playing it
+    const legal = getLegalMoves(state);
+    const found = legal.find(m =>
+      m.fromRow === bookMove.fromRow && m.fromCol === bookMove.fromCol &&
+      m.toRow === bookMove.toRow && m.toCol === bookMove.toCol
+    );
+    if (found) {
+      console.log('Book move played!');
+      return found;
+    }
+  }
+
   return bestMove(state, depth);
 }

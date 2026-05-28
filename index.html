@@ -283,7 +283,7 @@
       }
     }
 
-    // ── AI (Web Worker) ───────────────────────────────────────
+    // ── AI (Web Worker) ──
     let aiWorker = null;
 
     function getWorker() {
@@ -291,6 +291,7 @@
         aiWorker = new Worker('./src/worker.js', { type: 'module' });
         aiWorker.onmessage = (e) => {
           const { type, move } = e.data;
+          if (type === 'debug') { console.log('Worker key:', e.data.key); return; }
           if (type === 'move_result') {
             if (move) {
               const pieceAtFrom = currentState.board[move.fromRow][move.fromCol];
@@ -318,13 +319,15 @@
       worker.postMessage({
         type: 'find_move',
         fen: toFEN(currentState),
+        history: currentState.moveHistory,
         mode: getAIMode(),
         depth: getDepth(),
       });
     }
 
-    // ── Controls ──────────────────────────────────────────────
+    // ── Controls ──
     document.getElementById('new-game').addEventListener('click', () => {
+      if (aiWorker) { aiWorker.terminate(); aiWorker = null; }
       currentState = parseFEN(STARTING_FEN);
       stateHistory = [currentState];
       selected = null;
@@ -361,7 +364,7 @@
       document.getElementById('new-game').click();
     });
 
-    // ── Init ─────────────────────────────────────────────────
+    // ── Init ──
     flipped = false;
     draw();
   </script>

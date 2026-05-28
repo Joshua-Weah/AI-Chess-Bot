@@ -131,7 +131,7 @@ export function toFEN(state) {
   return fen;
 }
 
-// ─── Move generation ─────────────────────────────────────────────────────────
+// ─── Move generation ───
 
 /**
  * A Move is: { fromRow, fromCol, toRow, toCol, promotion? }
