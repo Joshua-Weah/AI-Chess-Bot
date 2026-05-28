@@ -69,25 +69,20 @@ The code is structured so you can improve it stage by stage, committing after ea
 - [x] Minimax with alpha-beta pruning
 - [x] Basic move ordering (captures first)
 
-### Stage 3 — Stronger search
-- [ ] Iterative deepening (search deeper with time limit)
-- [ ] Transposition table (hash positions to avoid re-searching)
-- [ ] Quiescence search (avoid horizon-effect blunders)
-- [ ] Better move ordering (killer moves, history heuristic)
+### Stage 3 — Stronger search ✅
+- [x] Web Worker (non-blocking UI during deep search)
+- [x] Quiescence search (avoid horizon-effect blunders)
+- [x] Iterative deepening with time limit
 
-### Stage 4 — Stronger evaluation
-- [ ] King safety (pawn shield, open files near king)
-- [ ] Pawn structure (doubled, isolated, passed pawns)
-- [ ] Endgame detection + endgame PSTs
-- [ ] Mobility score (number of legal moves)
+### Stage 4 — Stronger evaluation ✅
+- [x] King safety (pawn shield, open files near king)
+- [x] Pawn structure (doubled, isolated, passed pawns)
 
-### Stage 5 — Opening & polish
-- [ ] Opening book (Polyglot .bin format)
-- [ ] Endgame tablebase probing (Syzygy via WASM)
-- [ ] FEN / PGN import-export
-- [ ] Engine vs engine mode
-- [ ] Web worker for AI (non-blocking UI during deep search)
-
+### Stage 5 — Opening & polish ✅
+- [x] Opening book (e4/d4 lines)
+- [x] Auto board flip based on player side
+- [x] King highlighted in red when in check
+- [x] Improved piece visibility
 ---
 
 ## Suggested Git Workflow
