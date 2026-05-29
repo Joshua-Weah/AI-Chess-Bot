@@ -8,13 +8,15 @@
  *   - King safety and pawn structure evaluation
  *   - Iterative deepening with time limit
  *   - Transposition table for position caching
+ *   - MVV-LVA move ordering in quiescence search
+ *   - Repetition penalty to prevent shuffling
  *   - Opening book
  */
 
-import { getLegalMoves, applyMove, getGameStatus, isWhite, isBlack, PIECES, WHITE, BLACK } from './board.js';
+import { getLegalMoves, applyMove, getGameStatus, isWhite, PIECES, WHITE, BLACK } from './board.js';
 import { getBookMove } from './openings.js';
 
-// ─── Transposition table ───
+// --- Transposition table ---
 
 const transpositionTable = new Map();
 
@@ -22,7 +24,7 @@ function getPositionKey(state) {
   return state.board.map(row => row.join(',')).join('|') + '|' + state.turn;
 }
 
-// ─── Random AI ───
+// --- Random AI ---
 
 export function randomMove(state) {
   const moves = getLegalMoves(state);
@@ -30,7 +32,7 @@ export function randomMove(state) {
   return moves[Math.floor(Math.random() * moves.length)];
 }
 
-// ─── Material evaluation ───
+// --- Material evaluation ---
 
 const PIECE_VALUES = {
   [PIECES.W_PAWN]:   100,  [PIECES.B_PAWN]:   -100,
@@ -114,7 +116,7 @@ const PST_MAP = {
   [PIECES.W_QUEEN]: PST_QUEEN, [PIECES.W_KING]: PST_KING,
 };
 
-// ─── King safety ───
+// --- King safety ---
 
 function kingSafety(state, side) {
   const kingPiece = side === WHITE ? PIECES.W_KING : PIECES.B_KING;
@@ -149,7 +151,7 @@ function kingSafety(state, side) {
   return score;
 }
 
-// ─── Pawn structure ───
+// --- Pawn structure ---
 
 function pawnStructure(state, side) {
   const pawnPiece = side === WHITE ? PIECES.W_PAWN : PIECES.B_PAWN;
@@ -188,7 +190,7 @@ function pawnStructure(state, side) {
   return score;
 }
 
-// ─── Static evaluation ───
+// --- Static evaluation ---
 
 export function evaluate(state) {
   let score = 0;
@@ -214,7 +216,7 @@ export function evaluate(state) {
   return score;
 }
 
-// ─── Search ───
+// --- Search ---
 
 const CHECKMATE_SCORE = 100000;
 
@@ -228,7 +230,15 @@ function quiescence(state, alpha, beta, maximising) {
     beta = Math.min(beta, stand_pat);
   }
 
-  const moves = getLegalMoves(state).filter(m => state.board[m.toRow][m.toCol] !== PIECES.EMPTY);
+  // MVV-LVA ordering — search most valuable captures first
+  const moves = getLegalMoves(state)
+    .filter(m => state.board[m.toRow][m.toCol] !== PIECES.EMPTY)
+    .sort((a, b) => {
+      const victimA = Math.abs(PIECE_VALUES[state.board[a.toRow][a.toCol]] || 0);
+      const victimB = Math.abs(PIECE_VALUES[state.board[b.toRow][b.toCol]] || 0);
+      return victimB - victimA;
+    });
+
   for (const move of moves) {
     const next = applyMove(state, move);
     const score = quiescence(next, alpha, beta, !maximising);
@@ -295,7 +305,9 @@ function alphaBeta(state, depth, alpha, beta, maximising) {
   return best;
 }
 
-export function bestMove(state, depth = 3) {
+// --- Best move with iterative deepening ---
+
+export function bestMove(state, depth = 4) {
   transpositionTable.clear();
   const moves = getLegalMoves(state);
   if (moves.length === 0) return null;
@@ -311,10 +323,23 @@ export function bestMove(state, depth = 3) {
     let bestScore = maximising ? -Infinity : Infinity;
     let bestAtDepth = moves[0];
 
+    // Repetition penalty — discourage shuffling
+    const posKey = getPositionKey(state);
+    const repeats = state.moveHistory.filter(
+      (m, i) => i >= state.moveHistory.length - 6
+    ).length;
+
     for (const move of moves) {
       if (Date.now() - start > TIME_LIMIT) break;
       const next = applyMove(state, move);
-      const score = alphaBeta(next, d - 1, -Infinity, Infinity, !maximising);
+      let score = alphaBeta(next, d - 1, -Infinity, Infinity, !maximising);
+
+      // Penalise moves that return to a recently seen position
+      const nextKey = getPositionKey(next);
+      if (transpositionTable.has(nextKey) && repeats > 4) {
+        score += maximising ? -50 : 50;
+      }
+
       if (maximising ? score > bestScore : score < bestScore) {
         bestScore = score;
         bestAtDepth = move;
@@ -327,9 +352,9 @@ export function bestMove(state, depth = 3) {
   return best;
 }
 
-// ─── AI selector ───
+// --- AI selector ---
 
-export function getAIMove(state, mode = 'minimax', depth = 3) {
+export function getAIMove(state, mode = 'minimax', depth = 4) {
   if (mode === 'random') return randomMove(state);
 
   const bookMove = getBookMove(state.moveHistory);
@@ -339,9 +364,7 @@ export function getAIMove(state, mode = 'minimax', depth = 3) {
       m.fromRow === bookMove.fromRow && m.fromCol === bookMove.fromCol &&
       m.toRow === bookMove.toRow && m.toCol === bookMove.toCol
     );
-    if (found) {
-      return found;
-    }
+    if (found) return found;
   }
 
   return bestMove(state, depth);
